@@ -262,12 +262,12 @@ def page_analisa():
             if contrato == 'ALIVAR':
                 st.session_state.ALIVAR_remove_ids.update({"{}".format(produto):id_r})
                 st.session_state.ALIVAR_aprove_ids.update({"{}".format(produto):id_s})
-                st.experimental_rerun()
+                st.rerun()
 
             if contrato == 'ALIATA':
                 st.session_state.ALIATA_remove_ids.update({"{}".format(produto):id_r})
                 st.session_state.ALIATA_aprove_ids.update({"{}".format(produto):id_s})
-                st.experimental_rerun()
+                st.rerun()
 
         if ids_to_remove:  # Verifica se existem Ids para analisar.      
 
@@ -276,7 +276,7 @@ def page_analisa():
             dados_remove_agg = dp.agg_table(st.session_state.Dados.query("Produto == '{}' and Id_produto == {} and Contrato == '{}'".format(r, id_r, contrato)),ids=list(ids_to_remove.values()), aprove=False, key=f"agg_table_{r}_{id_r}")
 
             # Mecanismo para passar Ids selecionados da tabela de 'Precos para Análise' para a tabela de 'Preços Aprovados'.
-            if len([row["Id_produto"] for row in dados_remove_agg["selected_rows"]]) >= 1:
+            if dados_aprove_agg["selected_rows"] is not None and len([row["Id_produto"] for row in dados_remove_agg["selected_rows"]]) >= 1:
 
                 id_s.extend([row["Id_produto"] for row in dados_remove_agg["selected_rows"]])
                 id_r = list(set(id_r).difference(set(id_s)))
@@ -285,19 +285,19 @@ def page_analisa():
                     st.session_state.ALIVAR_aprove_ids.update({"{}".format(produto):id_s})
                     if id_r:
                         st.session_state.ALIVAR_remove_ids.update({"{}".format(produto):id_r})
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.session_state.ALIVAR_remove_ids.pop(produto, None)
-                        st.experimental_rerun()
+                        st.rerun()
 
                 if contrato == 'ALIATA':
                     st.session_state.ALIATA_aprove_ids.update({"{}".format(produto):id_s})
                     if id_r:
                         st.session_state.ALIATA_remove_ids.update({"{}".format(produto):id_r})
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.session_state.ALIATA_remove_ids.pop(produto, None)
-                        st.experimental_rerun()
+                        st.rerun()
 
         else: # Caso não tenha, retorna apenas o título e uma mensagem de que não há dados a serem analisados.
             st.subheader('Preços para Análise:', divider="red")
@@ -463,7 +463,7 @@ def page_analisa():
 
                 st.success("Análise do {} registrada com sucesso".format(produto))
 
-                st.experimental_rerun()
+                st.rerun()
 
 def page_exporta():
     st.write("**Memória de cálculo**")
