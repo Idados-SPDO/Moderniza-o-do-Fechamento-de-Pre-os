@@ -254,7 +254,7 @@ def page_analisa():
         dados_aprove_agg = dp.agg_table(st.session_state.Dados.query("Produto == '{}' and Id_produto == {} and Contrato == '{}'".format(s, id_s, contrato)),ids=list(ids_to_select.values()), key=f"agg_table_{s}_{id_s}")
 
         # Mecanismo para passar Ids selecionados da tabela de 'Preços Aprovados' para a tabela de 'Precos para Análise'.
-        if len([row["Id_produto"] for row in dados_aprove_agg["selected_rows"]]) >= 1:
+        if dados_aprove_agg["selected_rows"] is not None and len([row["Id_produto"] for row in dados_aprove_agg["selected_rows"]]) >= 1:
 
             id_r.extend([row["Id_produto"] for row in dados_aprove_agg["selected_rows"]])
             id_s = list(set(id_s).difference(set(id_r)))
