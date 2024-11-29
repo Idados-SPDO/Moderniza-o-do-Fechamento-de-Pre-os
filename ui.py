@@ -1,12 +1,12 @@
 import streamlit as st
-import numpy as np
+# import numpy as np
 from numpy.core.fromnumeric import mean
-import os
+# import os
 import pandas as pd
 import data_processing as dp
-from st_aggrid import AgGrid
-from st_aggrid.grid_options_builder import GridOptionsBuilder
-from st_aggrid.shared import GridUpdateMode
+# from st_aggrid import AgGrid
+# from st_aggrid.grid_options_builder import GridOptionsBuilder
+# from st_aggrid.shared import GridUpdateMode
 import plotly.express as px
 
 def page_carrega_dado():

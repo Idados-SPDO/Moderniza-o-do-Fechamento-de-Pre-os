@@ -1,16 +1,16 @@
-from email import iterators
-from itertools import count
+# from email import iterators
+# from itertools import count
 import streamlit as st
 import pandas as pd
 import numpy as np
 from numpy.core.fromnumeric import mean
-from numpy.lib.function_base import median
-from numpy.ma.core import empty
+# from numpy.lib.function_base import median
+# from numpy.ma.core import empty
 from io import BytesIO
 from st_aggrid import AgGrid
 from st_aggrid.grid_options_builder import GridOptionsBuilder
 from st_aggrid.shared import GridUpdateMode
-import plotly.express as px
+# import plotly.express as px
 
 # LEITURA DE DADOS -----------------------------------------------------------------------------------------------------------------------
 
