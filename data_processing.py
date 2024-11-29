@@ -1,3 +1,4 @@
+from email import iterators
 from itertools import count
 import streamlit as st
 import pandas as pd
@@ -11,11 +12,62 @@ from st_aggrid.grid_options_builder import GridOptionsBuilder
 from st_aggrid.shared import GridUpdateMode
 import plotly.express as px
 
-def load_data(content_file=None):
+# LEITURA DE DADOS -----------------------------------------------------------------------------------------------------------------------
+
+# Tratamento da base para colocá-la no formato de input da ferramenta
+def transform_data(content_file=None, contrato=None):
+
     if content_file is not None:
-        content = pd.read_excel(content_file)
+        content = pd.read_excel(content_file, header=7)
+
+        
+        validador = False
+        new_content = pd.DataFrame(columns=['Contrato','Cód. Item Elementar', 'Desc. Item Elementar', 'Insinf/Cd Bases', 'Desc. Insinf', 'Sinônimo', 'Marca', 'Emb/Qtd', 
+                                    'Status Insinf', 'Cód Inf', 'Desc. Inf', 'Status Inf', 'Period', 'Preço Atual', 'Fator', 'Operador', 'Data Atual', 
+                                    'Preço Anterior', 'Preço Ref Anterior', 'Data Anterior', 'Tipo Preço', 'Região do preço', 'Reg. Ret.']) 
+
+        for i, j in content.iterrows():
+            if validador == False and isinstance(j['Elementar'], int):
+                elementar = j['Elementar']
+                descricao = j['Descrição']
+                ref_anterior = j['Preço ant']
+            if validador == True:
+                new_row = [
+                    
+                    contrato, elementar, descricao, j['Unnamed: 6'], j['Descrição'], '-', j['Unnamed: 2'], j['Medida'], j['Unnamed: 7'],
+                    j['Unnamed: 4'], j['Unnamed: 5'], j['Unnamed: 7'], j['Busca'], j['Cota perf.'], j['Usuário Aprovador'], j['Data Última Aprovação do Item'],
+                    j['Cota util'], j['Unnamed: 28'], ref_anterior, j['Unnamed: 29'], j['Variação'], j['Nível'], '-'
+
+                ]
+                new_content.loc[len(new_content)] = new_row
+            if 'Referência' in str(j['Elementar']) or pd.isna(j['Elementar']):
+                validador = False 
+            if 'Insumo' in str(j['Elementar']):
+                validador = True
+
+        new_content = new_content.dropna(subset=['Insinf/Cd Bases'])
+        new_content = new_content.dropna(subset=['Data Anterior'])
+        new_content = new_content.dropna(subset=['Data Atual'])
+        new_content = new_content.dropna(subset=['Preço Atual'])
+
+        new_content = new_content[new_content['Data Anterior'] != ' ']
+        new_content = new_content[new_content['Data Atual'] != ' ']
+        new_content = new_content[new_content['Preço Atual'] != ' ']
+
+        return new_content
+
+
+# Tratamento do dataframe que será importado na primeira página da aplicação, definindo os tipos de cada coluna e criando novas colunas.
+def load_data(content_file=None):
+
+    # Condicional que verifica se o arquivo que o arquivo recebido não está vazio.
+    if content_file is not None:
+        content = pd.DataFrame(content_file)
         content["Situacao"] = 1
+
+        # Definição de tipos de dados.
         content = content.astype({
+            "Contrato": "object",
             "Cód. Item Elementar": "object",
             "Desc. Item Elementar": "object",
             "Insinf/Cd Bases": "object",
@@ -39,57 +91,63 @@ def load_data(content_file=None):
             "Região do preço": "object",
             "Reg. Ret.": "object"
         })
+
+        # Criação de novas colunas necessárias.
         content["Produto"] = content["Cód. Item Elementar"].astype(str) + " - " + content["Desc. Item Elementar"]
         content["Preço Atual"] = content["Preço Atual"].round(decimals=2)
         content["Preço Anterior"] = content["Preço Anterior"].round(decimals=2)
         content["Id_produto"] = range(0, content.shape[0])
-        content["Outlier"] = content.groupby("Desc. Item Elementar")["Preço Atual"].transform(detecta_outlier)
+        content["Outlier"] = content.groupby(["Produto", "Contrato"])["Preço Atual"].transform(detecta_outlier)
         content["Variação analise"] = (content["Preço Atual"] - content["Preço Anterior"]) / content["Preço Anterior"]
         content["Variação"] = content["Variação analise"].apply(formatar_como_porcentagem)
         content.set_index("Id_produto")
         
         return content
-    
-def formatar_como_porcentagem(x):
-    return "{:.2%}".format(x)
 
-def baixar_resultados(df, arquivo):
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name=arquivo)
-    buffer.seek(0)  # Volte ao início do buffer
-    return st.download_button(label="Baixar", data=buffer, file_name=f"{arquivo}.xlsx")
+# ESTATÍSTICAS -------------------------------------------------------------------------------------------------------------------------
 
+# Função que faz a detecção de preços outlier.
 def detecta_outlier(x):
     limite_inf = lim_inf(x)
     limite_sup = lim_sup(x)
     outlier = ["*" if valor < limite_inf or valor > limite_sup else "" for valor in x]
     return outlier
 
+# Função que define o 1º quartil.
 def q_25(x):
     return x.quantile(0.25)
 
+# Função que define a média do 1º quartil.
+def media_q25(x):
+
+    limite = q_25(x)
+    if min(x) == limite:
+        x = x[x <= limite]
+    else:
+        x = x[x < limite]
+
+    return x.mean()
+
+# Função que define o 3º quartil.
 def q_75(x):
     return x.quantile(0.75)
 
+# Função que define o coeficiente de variação.
 def cv(x):
     if len(x.tolist()) > 2:
         return (np.std(x) / np.mean(x)) * 100
     else:
         return None
 
+# Função que define o limite inferior.
 def lim_inf(x):
     return q_25(x) - 1.5 * (q_75(x) - q_25(x))
 
+# Função que define o limite superior.
 def lim_sup(x):
-    return q_25(x) + 1.5 * (q_75(x) - q_25(x))
+    return q_75(x) + 1.5 * (q_75(x) - q_25(x))
 
-def aproveitamento(x):
-    return np.mean(x) * 100
-
-def unique_values(x):
-    return pd.unique(x)[0]
-
+# Função que define o status do coeficiente de variação.
 def cv_status(x):
     if x is not None:
         if x <= 5: status = "Ótimo"
@@ -101,9 +159,19 @@ def cv_status(x):
         status = "-"
     return status    
 
+# Função que define a amplitude.
 def amplitude(x):
     return max(x) - min(x)
 
+
+# Função que define valores únicos.
+def unique_values(x):
+    return pd.unique(x)[0]
+
+def aproveitamento(x):
+    return np.mean(x) * 100
+
+# Função que define um dataframe com todas as estatísticas geradas.
 def estatisticas_produtos(dados:pd.DataFrame):
 
     dados = dados.groupby("Produto").agg(
@@ -115,6 +183,7 @@ def estatisticas_produtos(dados:pd.DataFrame):
         Min = ("Preço Atual", min),
         Max = ("Preço Atual", max),
         Amplitude = ("Preço Atual", amplitude),
+        Media_Quartil1 = ("Preço Atual", media_q25),
         Quartil_1 = ("Preço Atual", q_25),
         Quartil_2 = ("Preço Atual", "median"),
         Quartil_3 = ("Preço Atual", q_75),
@@ -124,13 +193,165 @@ def estatisticas_produtos(dados:pd.DataFrame):
         Cotacoes_realizadas = ("Preço Atual", np.size)
     )
 
-    dados["Variacao_preco_atual_ant"] = 100*(dados["Media_geral"] - dados["Preco_ant"]) / dados["Preco_ant"]
-
-
+    if dados.index in st.session_state.Itens_media:
+        dados["Variacao_preco_atual_ant"] = 100*(dados["Media_geral"] - dados["Preco_ant"]) / dados["Preco_ant"]
+    else:
+        dados["Variacao_preco_atual_ant"] = 100*(dados["Media_Quartil1"] - dados["Preco_ant"]) / dados["Preco_ant"]
     return dados
 
+# Função que define os parametros para a aprovação de itens.
+def aprova_item(df):
+
+    if np.size(df) >= 3 and ( cv_status(cv(df['Preço Atual'])) in ['Bom', 'Ótimo', 'Razoável']) and (estatisticas_produtos(df)["Variacao_preco_atual_ant"].apply(lambda x: -19 <= x <= 19).all()):
+
+        return True
+    else:
+        
+        return False
+    
+def status_item(x):
+
+    produto = x['Produto']
+    contrato = x['Contrato']
+    
+    if contrato == "ALIVAR" and produto in st.session_state.ALIVAR_aprove_items:
+        return "Aprovado"
+    elif contrato == "ALIATA" and produto in st.session_state.ALIATA_aprove_items:
+        return "Aprovado"
+    else:
+        return "Não Aprovado"
+    
+def calcular_referencia(grupo):
+
+    produto = grupo["Produto"].iloc[0]
+
+    if produto in st.session_state.Itens_media:
+        preco_referencia = mean(grupo["Preço Atual"])
+    else:
+        preco_referencia = media_q25(grupo["Preço Atual"])
+
+    return pd.Series({
+        "Preco_referencia": preco_referencia,
+        "Preco_ant": unique_values(grupo["Preço Ref Anterior"]),
+        "C_V": cv(grupo["Preço Atual"]),
+        "Cotacoes_realizadas": len(grupo)
+    })
+
+def calcular_praticado(row, df, preco):
+
+    produto = row['Produto']
+    
+    # Filtra os preços de referência para o mesmo produto nos dois contratos.
+    precos = df[df['Produto'] == produto]
+    preco_alivar = precos.loc[precos['Contrato'] == 'ALIVAR', preco].values
+    preco_aliata = precos.loc[precos['Contrato'] == 'ALIATA', preco].values
+    
+    # Garante que ambos os preços existam para o cálculo.
+    if len(preco_alivar) > 0 and len(preco_aliata) > 0:
+        preco_alivar = preco_alivar[0]
+        preco_aliata = preco_aliata[0]
+        
+        # Calcula o Preco_praticado para o contrato ALIATA se o ALIVAR tiver maior preço.
+        if preco_alivar > preco_aliata:
+            return preco_aliata + 0.75 * (preco_alivar - preco_aliata)
+    
+    # Retorna None para todos os outros casos.
+    return None
+
+def qtd_praticado(df, contrato):
+
+    df_filtrado = df[df["Contrato"] == contrato]
+
+    total_none = df_filtrado['Preço Praticado'].isna().sum()
+
+    return total_none
+
+# DATAFRAMES -----------------------------------------------------------------------------------------------------
+
+def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
+
+    # Inicializando 'dados_selecionados' com as colunas de 'dados'
+    dados_selecionados = pd.DataFrame(columns=dados.columns)
+
+    list_dicts_ids = [ALIVAR_aprove_ids, ALIATA_aprove_ids]
+
+    # Combina todos os IDs dos dicionários em um único conjunto
+    ids_aprovados = set(id for d in list_dicts_ids for id_list in d.values() for id in id_list)
+    
+    # Filtra o DataFrame para incluir apenas os produtos cujos IDs estão no conjunto
+    dados_selecionados = dados[dados['Id_produto'].isin(ids_aprovados)]
+
+    dados_selecionados = dados_selecionados.groupby(["Produto", "Contrato"]).apply(calcular_referencia).reset_index()
+
+    dados_selecionados['Var. (%)'] = (
+        (dados_selecionados['Preco_referencia'] - dados_selecionados['Preco_ant'])
+        / dados_selecionados['Preco_ant']
+    ) * 100
+    dados_selecionados['Status'] = dados_selecionados.apply(status_item, axis=1)
+    dados_selecionados['Preço Praticado Ant.'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados, "Preco_ant"), axis=1)
+    dados_selecionados['Preço Praticado'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados, "Preco_referencia"), axis=1)
+
+    dados_selecionados['Var. Praticado (%)'] = (
+        (dados_selecionados['Preço Praticado'] - dados_selecionados['Preço Praticado Ant.'])
+        / dados_selecionados['Preço Praticado Ant.']
+    ) * 100
+
+    dados_selecionados["Preco_referencia"] = pd.to_numeric(dados_selecionados["Preco_referencia"], errors='coerce').round(2)
+    dados_selecionados["Preço Praticado"] = pd.to_numeric(dados_selecionados["Preço Praticado"], errors='coerce').round(2)
+    dados_selecionados["C_V"] = pd.to_numeric(dados_selecionados["C_V"], errors='coerce').round(2)
+    dados_selecionados["Preço Praticado Ant."] = pd.to_numeric(dados_selecionados["Preço Praticado Ant."], errors='coerce').round(2)
+    dados_selecionados['Var. (%)'] = pd.to_numeric(dados_selecionados['Var. (%)'], errors='coerce').round(2)
+    dados_selecionados['Var. Praticado (%)'] = pd.to_numeric(dados_selecionados['Var. Praticado (%)'], errors='coerce').round(2)
+
+    dados_selecionados = dados_selecionados.rename(columns={
+        'Preco_referencia': 'Preço de Referência',
+        'Preco_ant': 'Preço de Referência Ant.',
+        'C_V': 'C.V (%)',
+        'Cotacoes_realizadas': 'Cotações Realizadas'
+    })
+
+    # Nova ordem das colunas
+    nova_ordem = [
+        'Produto', 'Contrato', 'Cotações Realizadas', 'C.V (%)', 'Preço de Referência', 
+        'Preço de Referência Ant.', 'Var. (%)', 'Status', 'Preço Praticado', 
+        'Preço Praticado Ant.', 'Var. Praticado (%)'
+    ]
+
+    # Reordenando o DataFrame
+    dados_selecionados = dados_selecionados[nova_ordem]
+
+    return dados_selecionados
+
+def dados_download(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
+
+    # Inicializando 'dados_selecionados' com as colunas de 'dados'
+    dados_selecionados = pd.DataFrame(columns=dados.columns)
+
+    list_dicts_ids = [ALIVAR_aprove_ids, ALIATA_aprove_ids]
+
+    # Combina todos os IDs dos dicionários em um único conjunto
+    ids_aprovados = set(id for d in list_dicts_ids for id_list in d.values() for id in id_list)
+    
+    # Filtra o DataFrame para incluir apenas os produtos cujos IDs estão no conjunto
+    dados_selecionados = dados[dados['Id_produto'].isin(ids_aprovados)]
+
+    dados_selecionados = dados_selecionados.groupby(["Produto", "Contrato"]).apply(calcular_referencia).reset_index()
+
+    # Aplica a função status_item para definir o Status
+    dados_selecionados['Status'] = dados_selecionados.apply(status_item, axis=1)
+    dados_selecionados['Preco_praticado'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados), axis=1)
+
+    dados_selecionados["Preco_referencia"] = pd.to_numeric(dados_selecionados["Preco_referencia"], errors='coerce').round(2)
+    dados_selecionados["Preco_praticado"] = pd.to_numeric(dados_selecionados["Preco_praticado"], errors='coerce').round(2)
+    dados_selecionados["C_V"] = pd.to_numeric(dados_selecionados["C_V"], errors='coerce').round(2)
+    dados_selecionados["Preco_ant"] = pd.to_numeric(dados_selecionados["Preco_ant"], errors='coerce').round(2)
+
+    return dados_selecionados
+    
+# Função que define a tabela de checkbox para seleção manual de preços aprovados ou não aprovados.
 def agg_table(dados:pd.DataFrame, ids:list, aprove=True, key: str=None):
 
+    # Definição de nova ordem da tabela.
     nova_ordem = [
             "Cód Inf",
             "Produto",
@@ -160,20 +381,15 @@ def agg_table(dados:pd.DataFrame, ids:list, aprove=True, key: str=None):
             "Situacao",
             "Id_produto"
     ]
+
     dados = dados[nova_ordem]
+
+    # Define a ordenação das linhas pelos preços atuais, de forma crescente.
     dados = dados.sort_values(by = "Preço Atual").round(decimals=2)
+
     gb = GridOptionsBuilder().from_dataframe(dados)
     gb.configure_pagination()
 
-    # if aprove:
-    #     if ids is not None:
-    #         dados = dados.reset_index(drop=True)
-    #         ids_agg = dados.loc[dados["Id_produto"].isin(ids[0])].index.tolist()
-    #         gb.configure_selection(selection_mode="multiple",use_checkbox=True)
-
-    #     else:
-    #         gb.configure_selection(selection_mode="multiple",use_checkbox=True)
-    # else:
     if ids is not None:
         dados = dados.reset_index(drop=True)
         ids_agg = dados.loc[dados["Id_produto"].isin(ids[0])].index.tolist()
@@ -192,3 +408,28 @@ def agg_table(dados:pd.DataFrame, ids:list, aprove=True, key: str=None):
                 key=key)
 
     return data
+
+def criar_metrica(titulo, valor, subtitulo=None):
+    metrica = {
+        "titulo": titulo,
+        "valor": valor,
+        "subtitulo": subtitulo
+    }
+    
+    return metrica
+
+# FORMATAÇÃO -----------------------------------------------------------------------------------------------------
+    
+# Função que define um formato padrão para porcentagens.
+def formatar_como_porcentagem(x):
+    return "{:.2%}".format(x)
+    
+# DOWNLOAD -------------------------------------------------------------------------------------------------------
+
+# Função que permite ao usuário fazer download de arquivos.
+def baixar_resultados(df, arquivo):
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=arquivo)
+    buffer.seek(0)  # Volte ao início do buffer
+    return st.download_button(label="Baixar Dados de Fechamento", data=buffer, file_name=f"{arquivo}.xlsx")
