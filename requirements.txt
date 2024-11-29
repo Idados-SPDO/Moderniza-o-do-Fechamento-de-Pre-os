@@ -1,0 +1,4 @@
+pandas
+openpyxl
+streamlit==1.26.0
+babel
