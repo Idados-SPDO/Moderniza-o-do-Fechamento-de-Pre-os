@@ -108,7 +108,8 @@ def page_carrega_dado():
 
                         st.session_state.update({list_session_remove[i]: list_update})
 
-                st.session_state.update({"Dados_analise": dp.situacao_item(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                st.session_state.update({"Dados_analise": dp.download_resumido(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                st.session_state.update({"Download": dp.download_completo(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
 
                 # Exibe as primeiras 5 linhas do dataframe carregado.
                 st.dataframe(st.session_state.Dados.head().drop(labels=["Id_produto"], axis=1).style.format(precision=2))
@@ -125,19 +126,26 @@ def page_visao_geral():
 
     else:
 
-        # Debug -------------------------------------------------------------------------
-
         # Criando filtro por nível de regionalização
-        col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            tipo_filtro = st.selectbox("Status de Aprovação", options=["Todos", "Aprovados", "Não Aprovados"])
-        
+            list_status = ["Todos", "Aprovados", "Não Aprovados"]
+            tipo_filtro = st.selectbox("Status de Aprovação", options=list_status, index= st.session_state.filter_status)
+            st.session_state.update({"filter_status": list_status.index(tipo_filtro)})
 
+        with col2:
+            list_praticado = ["Todos", "Aprovado", "Não Aprovado"]
+            praticado_filtro = st.selectbox("Status do Preço Praticado", options=list_praticado, index= st.session_state.filter_praticado)
+            st.session_state.update({"filter_praticado": list_praticado.index(praticado_filtro)})
+
+        with col3:
+            list_comparacao = ["Todos", "Iguais", "Diferentes"]
+            comparacao_filtro = st.selectbox("Comparação SFPC", options=list_comparacao, index= st.session_state.filter_comparacao)
+            st.session_state.update({"filter_comparacao": list_comparacao.index(comparacao_filtro)})
+        
         # Espaçamento.
         st.write('')
         st.write('')
-
-        # Debug -------------------------------------------------------------------------
 
         Aprove_items = list(st.session_state.ALIVAR_aprove_items)
         for item in st.session_state.ALIATA_aprove_items:
@@ -155,28 +163,141 @@ def page_visao_geral():
         col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
         with col1:
             st.header(f'ALIVAR', divider="red")
-            st.subheader(f'Itens Aprovados: {len(st.session_state.ALIVAR_aprove_items)}')
-            st.subheader(f':red[Itens Não Aprovados:] {len(st.session_state.ALIVAR_remove_items)}')
+            st.subheader(f'Aprovados: {len(st.session_state.ALIVAR_aprove_items)} ({dp.formatar_como_porcentagem(len(st.session_state.ALIVAR_aprove_items)/185)})')
+            st.subheader(f':red[Não Aprovados:] {len(st.session_state.ALIVAR_remove_items)} ({dp.formatar_como_porcentagem(len(st.session_state.ALIVAR_remove_items)/185)})')
             st.subheader(f':red[Itens Sem Preço:] {185-(len(st.session_state.ALIVAR_aprove_items)+len(st.session_state.ALIVAR_remove_items))}') 
             st.subheader(f':red[Atacado > Varejo:] {dp.qtd_praticado(st.session_state.Dados_analise, "ALIVAR")}')
         with col3:
             st.header(f'ALIATA', divider="red")
-            st.subheader(f'Itens Aprovados: {len(st.session_state.ALIATA_aprove_items)}')
-            st.subheader(f':red[Itens Não Aprovados:] {len(st.session_state.ALIATA_remove_items)}')
+            st.subheader(f'Aprovados: {len(st.session_state.ALIATA_aprove_items)} ({dp.formatar_como_porcentagem(len(st.session_state.ALIATA_aprove_items)/185)})')
+            st.subheader(f':red[Não Aprovados:] {len(st.session_state.ALIATA_remove_items)} ({dp.formatar_como_porcentagem(len(st.session_state.ALIATA_remove_items)/185)})')
             st.subheader(f':red[Itens Sem Preço:] {185-(len(st.session_state.ALIATA_aprove_items)+len(st.session_state.ALIATA_remove_items))}') 
 
         # Espaçamento.
         st.write('')
         st.write('')
 
-        if tipo_filtro == "Todos":
-            st.dataframe(st.session_state.Dados_analise, width = 2200)
-        if tipo_filtro == "Aprovados":
-            st.dataframe(st.session_state.Dados_analise[st.session_state.Dados_analise["Status"] == "Aprovado"], width = 2000)
-        if tipo_filtro == "Não Aprovados":
-            st.dataframe(st.session_state.Dados_analise[st.session_state.Dados_analise["Status"] == "Não Aprovado"], width = 2000)
+        df_analise = st.session_state.Dados_analise
 
-        dp.baixar_resultados(st.session_state.Dados_analise, "Dados de Fechamento")
+        if tipo_filtro == "Todos":
+
+            if comparacao_filtro == "Todos":
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Iguais":
+
+                df_analise = df_analise [ df_analise ["Comparação"] == "Igual" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Diferentes":
+                df_analise = df_analise [ df_analise ["Comparação"] == "Diferente" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+            
+        if tipo_filtro == "Aprovados":
+
+            df_analise = df_analise [ df_analise ["Status"] == "Aprovado" ]
+
+            if comparacao_filtro == "Todos":
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Iguais":
+                df_analise = df_analise [ df_analise ["Comparação"] == "Igual" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Diferentes":
+                df_analise = df_analise [ df_analise ["Comparação"] == "Diferente" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+        if tipo_filtro == "Não Aprovados":
+
+            df_analise = df_analise [ df_analise ["Status"] == "Não Aprovado" ]
+
+            if comparacao_filtro == "Todos":
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Iguais":
+                df_analise = df_analise [ df_analise ["Comparação"] == "Igual" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+            if comparacao_filtro == "Diferentes":
+                df_analise = df_analise [ df_analise ["Comparação"] == "Diferente" ]
+
+                if praticado_filtro == "Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].notna()]
+                if praticado_filtro == "Não Aprovado":
+                    df_analise = df_analise[df_analise["Preço Praticado"].isna()]
+
+        st.header('Resumo do Fechamento', divider="red")
+        itens_apresentados = df_analise["Produto"]
+        col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
+        with col1:
+            itens_apresentados = df_analise[df_analise["Contrato"] == "ALIVAR"]
+            st.subheader(f'Itens disponíveis no ALIVAR: {len(list(set(itens_apresentados["Produto"])))}')
+        with col3:
+            itens_apresentados = df_analise[df_analise["Contrato"] == "ALIATA"]
+            st.subheader(f'Itens disponíveis no ALIATA: {len(list(set(itens_apresentados["Produto"])))}')
+
+        st.write('')
+        st.write('')
+        st.write('')
+        st.write('')
+
+        itens_apresentados = list(set(itens_apresentados["Produto"]))
+        itens_apresentados.insert(0, "Todos")
+
+        # Garantir que o produto selecionado ainda está na lista, senão voltar para 'Todos'
+        if st.session_state.filter_desc_geral not in itens_apresentados:
+            produto_selecionado = "Todos"
+        else:
+            produto_selecionado = st.session_state.filter_desc_geral
+
+        produto = st.selectbox(label="Descrição",options=itens_apresentados, index= itens_apresentados.index(produto_selecionado))
+        st.session_state.update({"filter_desc_geral": produto})
+
+        st.write('')
+        st.write('')
+        st.write('')
+        st.write('')
+        
+        if produto == "Todos":
+            st.dataframe(df_analise, width = 2000)
+        if produto != "Todos":
+            st.dataframe(df_analise[df_analise["Produto"] == produto], width = 2000)
+
+        dp.baixar_resultados(st.session_state.Dados_analise, "Dados de Fechamento resumido", "Resumo")
+        dp.baixar_resultados(st.session_state.Download, "Dados de Fechamento completo", "Completo")
 
 def page_analisa():
 
@@ -193,7 +314,9 @@ def page_analisa():
         # Criando filtro por nível de regionalização
         col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
         with col1:
-            contrato = st.selectbox("Contrato", options=['ALIVAR', 'ALIATA'])
+            list_contratos = ['ALIVAR', 'ALIATA']
+            contrato = st.selectbox("Contrato", options=list_contratos, index= st.session_state.filter_contrato)
+            st.session_state.update({"filter_contrato": list_contratos.index(contrato)})
 
 
         # Espaçamento.
@@ -221,7 +344,9 @@ def page_analisa():
         # Criando fitros para seleção dos itens.
         col1,col2 = st.columns([1.57, 1.5])
         with col1:
-            tipo_filtro = st.radio("Tipo de filtro", options=["Pré-analisados", "Aprovados"])
+            list_tipo = ["Pré-analisados", "Aprovados"]
+            tipo_filtro = st.radio("Tipo de filtro", options= list_tipo, index= st.session_state.filter_tipo)
+            st.session_state.update({"filter_tipo": list_tipo.index(tipo_filtro)})
         with col2: 
             if tipo_filtro == "Pré-analisados": 
                 itens_disp = Remove_items
@@ -230,7 +355,9 @@ def page_analisa():
             st.metric("Itens disponíveis", len(itens_disp))
 
         # Definindo filtros para seleção dos produtos.
-        produto = st.selectbox(label="Descrição",options=itens_disp)  
+        list_produtos = list(itens_disp)
+        produto = st.selectbox(label="Descrição",options=itens_disp, index= st.session_state.filter_desc)
+        st.session_state.update({"filter_desc": list_produtos.index(produto)})  
 
             
         
@@ -253,10 +380,16 @@ def page_analisa():
         st.subheader('Preços Aprovados:', divider="red")
         dados_aprove_agg = dp.agg_table(st.session_state.Dados.query("Produto == '{}' and Id_produto == {} and Contrato == '{}'".format(s, id_s, contrato)),ids=list(ids_to_select.values()), key=f"agg_table_{s}_{id_s}")
 
-        # Mecanismo para passar Ids selecionados da tabela de 'Preços Aprovados' para a tabela de 'Precos para Análise'.
-        if dados_aprove_agg["selected_rows"] is not None and len([row["Id_produto"] for row in dados_aprove_agg["selected_rows"]]) >= 1:
+        # # Debgug ------------------------------------------------------------------------------------------------------------------------
 
-            id_r.extend([row["Id_produto"] for row in dados_aprove_agg["selected_rows"]])
+        # st.write(dados_aprove_agg["selected_rows"]["Id_produto"].tolist())
+
+        # # Debgug ------------------------------------------------------------------------------------------------------------------------
+
+        # Mecanismo para passar Ids selecionados da tabela de 'Preços Aprovados' para a tabela de 'Precos para Análise'.
+        if dados_aprove_agg["selected_rows"] is not None and not dados_aprove_agg["selected_rows"].empty:
+
+            id_r.extend(dados_aprove_agg["selected_rows"]["Id_produto"].tolist())
             id_s = list(set(id_s).difference(set(id_r)))
 
             if contrato == 'ALIVAR':
@@ -276,9 +409,9 @@ def page_analisa():
             dados_remove_agg = dp.agg_table(st.session_state.Dados.query("Produto == '{}' and Id_produto == {} and Contrato == '{}'".format(r, id_r, contrato)),ids=list(ids_to_remove.values()), aprove=False, key=f"agg_table_{r}_{id_r}")
 
             # Mecanismo para passar Ids selecionados da tabela de 'Precos para Análise' para a tabela de 'Preços Aprovados'.
-            if dados_aprove_agg["selected_rows"] is not None and len([row["Id_produto"] for row in dados_remove_agg["selected_rows"]]) >= 1:
+            if dados_remove_agg["selected_rows"] is not None and not dados_remove_agg["selected_rows"].empty:
 
-                id_s.extend([row["Id_produto"] for row in dados_remove_agg["selected_rows"]])
+                id_s.extend(dados_remove_agg["selected_rows"]["Id_produto"].tolist())
                 id_r = list(set(id_r).difference(set(id_s)))
 
                 if contrato == 'ALIVAR':
@@ -454,12 +587,14 @@ def page_analisa():
                     if contrato == 'ALIVAR':
                         if s not in st.session_state.ALIVAR_aprove_items:
                             st.session_state.ALIVAR_aprove_items.append(s)
-                        st.session_state.update({"Dados_analise": dp.situacao_item(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                        st.session_state.update({"Dados_analise": dp.download_resumido(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                        st.session_state.update({"Download": dp.download_completo(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
 
                     if contrato == 'ALIATA':
                         if s not in st.session_state.ALIATA_aprove_items:
                             st.session_state.ALIATA_aprove_items.append(s)
-                        st.session_state.update({"Dados_analise": dp.situacao_item(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                        st.session_state.update({"Dados_analise": dp.download_resumido(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
+                        st.session_state.update({"Download": dp.download_completo(st.session_state.Dados, st.session_state.ALIVAR_aprove_ids, st.session_state.ALIATA_aprove_ids)})
 
                 st.success("Análise do {} registrada com sucesso".format(produto))
 

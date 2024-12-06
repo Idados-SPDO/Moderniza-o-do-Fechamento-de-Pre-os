@@ -28,12 +28,22 @@ def main():
     if "Dados" not in st.session_state:
         st.session_state.update(
             {
+            # Estados
+
+            "filter_contrato": 0,
+            "filter_tipo": 0,
+            "filter_desc_geral": "Todos",
+            "filter_desc": 0,
+            "filter_status": 0,
+            "filter_comparacao": 0,
+            "filter_praticado": 0,
+
+            
+            # Dados
+
                 "Dados": None,
                 "Dados_analise": None,
                 "Download": None,
-
-                "desc": None,
-                 
 
                 "Items" : [],
                 "ALIVAR_items" : [],

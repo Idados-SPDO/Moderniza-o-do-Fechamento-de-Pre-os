@@ -24,19 +24,20 @@ def transform_data(content_file=None, contrato=None):
         validador = False
         new_content = pd.DataFrame(columns=['Contrato','Cód. Item Elementar', 'Desc. Item Elementar', 'Insinf/Cd Bases', 'Desc. Insinf', 'Sinônimo', 'Marca', 'Emb/Qtd', 
                                     'Status Insinf', 'Cód Inf', 'Desc. Inf', 'Status Inf', 'Period', 'Preço Atual', 'Fator', 'Operador', 'Data Atual', 
-                                    'Preço Anterior', 'Preço Ref Anterior', 'Data Anterior', 'Tipo Preço', 'Região do preço', 'Reg. Ret.']) 
+                                    'Preço Anterior', 'SFPC Ref', 'Preço Ref Anterior', 'Data Anterior', 'Tipo Preço', 'Região do preço', 'Reg. Ret.']) 
 
         for i, j in content.iterrows():
             if validador == False and isinstance(j['Elementar'], int):
                 elementar = j['Elementar']
                 descricao = j['Descrição']
                 ref_anterior = j['Preço ant']
+                ref_atual = j["Preço atu"]
             if validador == True:
                 new_row = [
                     
                     contrato, elementar, descricao, j['Unnamed: 6'], j['Descrição'], '-', j['Unnamed: 2'], j['Medida'], j['Unnamed: 7'],
                     j['Unnamed: 4'], j['Unnamed: 5'], j['Unnamed: 7'], j['Busca'], j['Cota perf.'], j['Usuário Aprovador'], j['Data Última Aprovação do Item'],
-                    j['Cota util'], j['Unnamed: 28'], ref_anterior, j['Unnamed: 29'], j['Variação'], j['Nível'], '-'
+                    j['Cota util'], j['Unnamed: 28'], ref_atual, ref_anterior, j['Unnamed: 29'], j['Variação'], j['Nível'], '-'
 
                 ]
                 new_content.loc[len(new_content)] = new_row
@@ -85,6 +86,7 @@ def load_data(content_file=None):
             "Operador": "object",
             "Data Atual": "datetime64[ns]",
             "Preço Anterior": "float64",
+            "SFPC Ref": "float64",
             "Preço Ref Anterior": "float64",
             "Data Anterior": "datetime64[ns]",
             "Tipo Preço": "object",
@@ -119,12 +121,9 @@ def q_25(x):
 
 # Função que define a média do 1º quartil.
 def media_q25(x):
-
     limite = q_25(x)
-    if min(x) == limite:
-        x = x[x <= limite]
-    else:
-        x = x[x < limite]
+    x = x[x <= limite]
+
 
     return x.mean()
 
@@ -141,7 +140,10 @@ def cv(x):
 
 # Função que define o limite inferior.
 def lim_inf(x):
-    return q_25(x) - 1.5 * (q_75(x) - q_25(x))
+    if (q_25(x) - 1.5 * (q_75(x) - q_25(x))) < 0:
+        return 0
+    else:
+        return q_25(x) - 1.5 * (q_75(x) - q_25(x))
 
 # Função que define o limite superior.
 def lim_sup(x):
@@ -208,7 +210,8 @@ def aprova_item(df):
     else:
         
         return False
-    
+
+# Função que adiciona o status do item (Aprovado e Não Aprovado) aos arquivos de download
 def status_item(x):
 
     produto = x['Produto']
@@ -220,23 +223,61 @@ def status_item(x):
         return "Aprovado"
     else:
         return "Não Aprovado"
+
+# Função que adiciona o status de comparação do preço (igual ao SFPC ou diferente do SFPC) aos arquivos de download.
+def status_preco(x):
+
+    try:
+        mfp = x['Preco_referencia']
+        sfpc = x['SFPC Ref']
+    except KeyError:
+        mfp = x['Preco_referencia']
+        sfpc = x['SFPC_ref']
     
-def calcular_referencia(grupo):
-
-    produto = grupo["Produto"].iloc[0]
-
-    if produto in st.session_state.Itens_media:
-        preco_referencia = mean(grupo["Preço Atual"])
+    if mfp == sfpc:
+        return "Igual"
     else:
-        preco_referencia = media_q25(grupo["Preço Atual"])
+        return "Diferente"
 
-    return pd.Series({
-        "Preco_referencia": preco_referencia,
-        "Preco_ant": unique_values(grupo["Preço Ref Anterior"]),
-        "C_V": cv(grupo["Preço Atual"]),
-        "Cotacoes_realizadas": len(grupo)
-    })
+# Função que adiciona os preços de referência aos arquivos de download.
+def calcular_referencia(df, resumo, row=None):
+    """
+    df --> dataframe que será recebido pela função;
+    resumo --> parâmetro booleano que indica se será retornada uma agregação ou não;
+    row --> Caso resumo seja False, é necessário que a função receba o argumento row, já que terá que ser aplicada como lambda na coluna que será criada;
+    """
 
+    if resumo:
+
+        produto = df["Produto"].iloc[0]
+
+        if produto in st.session_state.Itens_media:
+            preco_referencia = mean(df["Preço Atual"])
+        else:
+            preco_referencia = media_q25(df["Preço Atual"])
+
+        return pd.Series({
+            "Preco_referencia": preco_referencia,
+            "Preco_ant": unique_values(df["Preço Ref Anterior"]),
+            "SFPC_ref": unique_values(df["SFPC Ref"]),
+            "C_V": cv(df["Preço Atual"]),
+            "Cotacoes_realizadas": len(df)
+        })
+    else:
+
+        produto = row['Produto']
+        contrato = row['Contrato']
+        precos = df[(df['Produto'] == produto) & (df['Contrato'] == contrato)]
+        preco = precos["Preço Atual"]
+
+        if produto in st.session_state.Itens_media:
+            preco_referencia = mean(preco)
+        else:
+            preco_referencia = media_q25(preco)
+
+        return preco_referencia
+
+# Função que adiciona os preços praticados aos arquivos de download.
 def calcular_praticado(row, df, preco):
 
     produto = row['Produto']
@@ -258,6 +299,7 @@ def calcular_praticado(row, df, preco):
     # Retorna None para todos os outros casos.
     return None
 
+# Função que retorna a quantidade de itens que possuem o preço de atacado maior que o preço de varejo.
 def qtd_praticado(df, contrato):
 
     df_filtrado = df[df["Contrato"] == contrato]
@@ -268,7 +310,8 @@ def qtd_praticado(df, contrato):
 
 # DATAFRAMES -----------------------------------------------------------------------------------------------------
 
-def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
+# Função que retorna o dataframe com os dados de fechamento resumidos por item.
+def download_resumido(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
 
     # Inicializando 'dados_selecionados' com as colunas de 'dados'
     dados_selecionados = pd.DataFrame(columns=dados.columns)
@@ -281,7 +324,7 @@ def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
     # Filtra o DataFrame para incluir apenas os produtos cujos IDs estão no conjunto
     dados_selecionados = dados[dados['Id_produto'].isin(ids_aprovados)]
 
-    dados_selecionados = dados_selecionados.groupby(["Produto", "Contrato"]).apply(calcular_referencia).reset_index()
+    dados_selecionados = dados_selecionados.groupby(["Produto", "Contrato"]).apply(calcular_referencia, resumo=True).reset_index()
 
     dados_selecionados['Var. (%)'] = (
         (dados_selecionados['Preco_referencia'] - dados_selecionados['Preco_ant'])
@@ -296,6 +339,7 @@ def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
         / dados_selecionados['Preço Praticado Ant.']
     ) * 100
 
+    dados_selecionados["SFPC_ref"] = pd.to_numeric(dados_selecionados["SFPC_ref"], errors='coerce').round(2)
     dados_selecionados["Preco_referencia"] = pd.to_numeric(dados_selecionados["Preco_referencia"], errors='coerce').round(2)
     dados_selecionados["Preço Praticado"] = pd.to_numeric(dados_selecionados["Preço Praticado"], errors='coerce').round(2)
     dados_selecionados["C_V"] = pd.to_numeric(dados_selecionados["C_V"], errors='coerce').round(2)
@@ -303,7 +347,10 @@ def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
     dados_selecionados['Var. (%)'] = pd.to_numeric(dados_selecionados['Var. (%)'], errors='coerce').round(2)
     dados_selecionados['Var. Praticado (%)'] = pd.to_numeric(dados_selecionados['Var. Praticado (%)'], errors='coerce').round(2)
 
+    dados_selecionados['Comparação'] = dados_selecionados.apply(status_preco, axis=1)
+
     dados_selecionados = dados_selecionados.rename(columns={
+        'SFPC_ref': 'SFPC Ref',
         'Preco_referencia': 'Preço de Referência',
         'Preco_ant': 'Preço de Referência Ant.',
         'C_V': 'C.V (%)',
@@ -312,7 +359,7 @@ def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
 
     # Nova ordem das colunas
     nova_ordem = [
-        'Produto', 'Contrato', 'Cotações Realizadas', 'C.V (%)', 'Preço de Referência', 
+        'Produto', 'Contrato', 'Cotações Realizadas', 'C.V (%)', 'Comparação', 'SFPC Ref', 'Preço de Referência', 
         'Preço de Referência Ant.', 'Var. (%)', 'Status', 'Preço Praticado', 
         'Preço Praticado Ant.', 'Var. Praticado (%)'
     ]
@@ -322,7 +369,8 @@ def situacao_item(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
 
     return dados_selecionados
 
-def dados_download(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
+# Função que retorna o dataframe de dados de fechamento completo.
+def download_completo(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
 
     # Inicializando 'dados_selecionados' com as colunas de 'dados'
     dados_selecionados = pd.DataFrame(columns=dados.columns)
@@ -335,16 +383,67 @@ def dados_download(dados, ALIVAR_aprove_ids, ALIATA_aprove_ids):
     # Filtra o DataFrame para incluir apenas os produtos cujos IDs estão no conjunto
     dados_selecionados = dados[dados['Id_produto'].isin(ids_aprovados)]
 
-    dados_selecionados = dados_selecionados.groupby(["Produto", "Contrato"]).apply(calcular_referencia).reset_index()
+    dados_selecionados['Preco_referencia'] = dados_selecionados.apply(lambda row: calcular_referencia(dados_selecionados, False, row), axis=1)
 
-    # Aplica a função status_item para definir o Status
+    dados_selecionados['Var. (%)'] = (
+        (dados_selecionados['Preco_referencia'] - dados_selecionados["Preço Ref Anterior"])
+        / dados_selecionados["Preço Ref Anterior"]
+    ) * 100
     dados_selecionados['Status'] = dados_selecionados.apply(status_item, axis=1)
-    dados_selecionados['Preco_praticado'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados), axis=1)
+    dados_selecionados['Preço Praticado Ant.'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados, "Preço Ref Anterior"), axis=1)
+    dados_selecionados['Preço Praticado'] = dados_selecionados.apply(lambda row: calcular_praticado(row, dados_selecionados, "Preco_referencia"), axis=1)
 
+    dados_selecionados['C.V (%)'] = dados_selecionados.apply(
+        lambda row: cv(
+            dados_selecionados[
+                (dados_selecionados['Produto'] == row['Produto']) &
+                (dados_selecionados['Contrato'] == row['Contrato'])
+            ]['Preço Atual']
+        ), 
+        axis=1
+    )
+
+    dados_selecionados['Cotações Realizadas'] = dados_selecionados.apply(
+    lambda row: dados_selecionados[
+        (dados_selecionados['Produto'] == row['Produto']) &
+        (dados_selecionados['Contrato'] == row['Contrato'])
+    ].shape[0], 
+    axis=1
+    )
+
+    dados_selecionados['Var. Praticado (%)'] = (
+        (dados_selecionados['Preço Praticado'] - dados_selecionados['Preço Praticado Ant.'])
+        / dados_selecionados['Preço Praticado Ant.']
+    ) * 100
+
+    dados_selecionados["SFPC Ref"] = pd.to_numeric(dados_selecionados["SFPC Ref"], errors='coerce').round(2)
     dados_selecionados["Preco_referencia"] = pd.to_numeric(dados_selecionados["Preco_referencia"], errors='coerce').round(2)
-    dados_selecionados["Preco_praticado"] = pd.to_numeric(dados_selecionados["Preco_praticado"], errors='coerce').round(2)
-    dados_selecionados["C_V"] = pd.to_numeric(dados_selecionados["C_V"], errors='coerce').round(2)
-    dados_selecionados["Preco_ant"] = pd.to_numeric(dados_selecionados["Preco_ant"], errors='coerce').round(2)
+    dados_selecionados["Preço Praticado"] = pd.to_numeric(dados_selecionados["Preço Praticado"], errors='coerce').round(2)
+    dados_selecionados["C.V (%)"] = pd.to_numeric(dados_selecionados["C.V (%)"], errors='coerce').round(2)
+    dados_selecionados["Preço Praticado Ant."] = pd.to_numeric(dados_selecionados["Preço Praticado Ant."], errors='coerce').round(2)
+    dados_selecionados['Var. (%)'] = pd.to_numeric(dados_selecionados['Var. (%)'], errors='coerce').round(2)
+    dados_selecionados['Var. Praticado (%)'] = pd.to_numeric(dados_selecionados['Var. Praticado (%)'], errors='coerce').round(2)
+
+    dados_selecionados['Comparação'] = dados_selecionados.apply(status_preco, axis=1)
+
+    dados_selecionados = dados_selecionados.rename(columns={
+        'Preco_referencia': 'Preço de Referência',
+        "Preço Ref Anterior": 'Preço de Referência Ant.'
+    })
+
+    # Nova ordem das colunas
+    nova_ordem = [
+        "Contrato", "Cód. Item Elementar", "Desc. Item Elementar", "Comparação", 
+        "Cotações Realizadas", "C.V (%)", "SFPC Ref", "Preço de Referência", 
+        "Preço de Referência Ant.", "Var. (%)","Status", "Preço Praticado", 
+        "Preço Praticado Ant.", "Var. Praticado (%)", "Insinf/Cd Bases", "Desc. Insinf", 
+        "Preço Atual", "Preço Anterior", "Marca", "Emb/Qtd", "Cód Inf", "Desc. Inf", 
+        "Period", "Fator", "Operador", "Data Atual", "Data Anterior", "Tipo Preço", 
+        "Região do preço", "Reg. Ret.", "Produto"
+    ]
+
+    # Reordenando o DataFrame
+    dados_selecionados = dados_selecionados[nova_ordem]
 
     return dados_selecionados
     
@@ -427,9 +526,12 @@ def formatar_como_porcentagem(x):
 # DOWNLOAD -------------------------------------------------------------------------------------------------------
 
 # Função que permite ao usuário fazer download de arquivos.
-def baixar_resultados(df, arquivo):
+def baixar_resultados(df, arquivo, tipo):
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=arquivo)
     buffer.seek(0)  # Volte ao início do buffer
-    return st.download_button(label="Baixar Dados de Fechamento", data=buffer, file_name=f"{arquivo}.xlsx")
+    if tipo == "Resumo":
+        return st.download_button(label="Baixar Dados resumidos de Fechamento", data=buffer, file_name=f"{arquivo}.xlsx")
+    if tipo == "Completo":
+        return st.download_button(label="Baixar Dados completos de Fechamento", data=buffer, file_name=f"{arquivo}.xlsx")
