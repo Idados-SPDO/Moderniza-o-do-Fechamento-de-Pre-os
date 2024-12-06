@@ -260,6 +260,10 @@ def page_visao_geral():
                     df_analise = df_analise[df_analise["Preço Praticado"].isna()]
 
         st.header('Resumo do Fechamento', divider="red")
+
+        st.write('')
+        st.write('')
+        
         itens_apresentados = df_analise["Produto"]
         col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
         with col1:
@@ -269,8 +273,6 @@ def page_visao_geral():
             itens_apresentados = df_analise[df_analise["Contrato"] == "ALIATA"]
             st.subheader(f'Itens disponíveis no ALIATA: {len(list(set(itens_apresentados["Produto"])))}')
 
-        st.write('')
-        st.write('')
         st.write('')
         st.write('')
 
