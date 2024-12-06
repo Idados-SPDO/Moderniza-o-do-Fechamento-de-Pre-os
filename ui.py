@@ -358,7 +358,12 @@ def page_analisa():
 
         # Definindo filtros para seleção dos produtos.
         list_produtos = list(itens_disp)
-        produto = st.selectbox(label="Descrição",options=itens_disp, index= st.session_state.filter_desc)
+        
+        produto_selecionado = st.session_state.filter_desc
+        if produto_selecionado not in itens_disp:
+            produto_selecionado = 0
+
+        produto = st.selectbox(label="Descrição",options=itens_disp, index= produto_selecionado)
         st.session_state.update({"filter_desc": list_produtos.index(produto)})  
 
             
