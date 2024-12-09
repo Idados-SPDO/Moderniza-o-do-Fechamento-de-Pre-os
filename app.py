@@ -28,7 +28,7 @@ def main():
     if "Dados" not in st.session_state:
         st.session_state.update(
             {
-            # Estados
+            # Guardar estados de filtro entre as páginas.
 
             "filter_contrato": 0,
             "filter_tipo": 0,
@@ -69,6 +69,7 @@ def main():
                     'Status C.V'
 
                 ],
+
                 "Itens_media": [
                     "304885 - LEITE EM PÓ, DESNATADO",
                     "304886 - LEITE EM PÓ, INTEGRAL",

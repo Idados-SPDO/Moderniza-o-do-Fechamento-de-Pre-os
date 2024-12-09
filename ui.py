@@ -1,29 +1,13 @@
 import streamlit as st
-# import numpy as np
 from numpy.core.fromnumeric import mean
-# import os
 import pandas as pd
 import data_processing as dp
-# from st_aggrid import AgGrid
-# from st_aggrid.grid_options_builder import GridOptionsBuilder
-# from st_aggrid.shared import GridUpdateMode
 import plotly.express as px
 
 def page_carrega_dado():
 
     # Título da página.
     st.title("Ferramenta para análise de preços referenciais")
-
-    # Definindo o estilo CSS
-    hide_label = '''
-    <style>
-    [data-testid="stFileUploadDropzone"] div div::before {font-size: 1.5em; content:"Selecione o arquivo."}
-    [data-testid="stFileUploadDropzone"] div div span{display:none;}
-    [data-testid="stFileUploadDropzone"] div div::after {content:"Limite de 200Mb por arquivo."}
-    [data-testid="stFileUploadDropzone"] div div small{display:none;}
-    </style>
-    '''
-    st.markdown(hide_label, unsafe_allow_html=True)
 
     # Sessão da página que permitirá o upload de arquivos.
     uploaded_files = st.file_uploader('', accept_multiple_files=True, type="xlsx", label_visibility="hidden")
@@ -311,8 +295,6 @@ def page_analisa():
 
     else:
 
-        # Debug -------------------------------------------------------------------------
-
         # Criando filtro por nível de regionalização
         col1, col2, col3 = st.columns([1.5, 0.05, 1.5])
         with col1:
@@ -326,8 +308,6 @@ def page_analisa():
         st.write('')
         st.write('')
         st.write('')
-
-        # Debug -------------------------------------------------------------------------
 
         if contrato == 'ALIVAR':
             Aprove_items = st.session_state.ALIVAR_aprove_items  
@@ -351,20 +331,17 @@ def page_analisa():
             st.session_state.update({"filter_tipo": list_tipo.index(tipo_filtro)})
         with col2: 
             if tipo_filtro == "Pré-analisados": 
-                itens_disp = Remove_items
+                itens_disp = list(Remove_items)
             else: 
-                itens_disp = Aprove_items
+                itens_disp = list(Aprove_items)
             st.metric("Itens disponíveis", len(itens_disp))
-
-        # Definindo filtros para seleção dos produtos.
-        list_produtos = list(itens_disp)
         
         produto_selecionado = st.session_state.filter_desc
-        if produto_selecionado not in itens_disp:
+        if produto_selecionado > len(itens_disp):
             produto_selecionado = 0
 
         produto = st.selectbox(label="Descrição",options=itens_disp, index= produto_selecionado)
-        st.session_state.update({"filter_desc": list_produtos.index(produto)})  
+        st.session_state.update({"filter_desc": itens_disp.index(produto)})  
 
             
         
@@ -387,13 +364,6 @@ def page_analisa():
         st.subheader('Preços Aprovados:', divider="red")
         dados_aprove_agg = dp.agg_table(st.session_state.Dados.query("Produto == '{}' and Id_produto == {} and Contrato == '{}'".format(s, id_s, contrato)),ids=list(ids_to_select.values()), key=f"agg_table_{s}_{id_s}")
 
-        # # Debgug ------------------------------------------------------------------------------------------------------------------------
-
-        # st.write(dados_aprove_agg["selected_rows"]["Id_produto"].tolist())
-
-        # # Debgug ------------------------------------------------------------------------------------------------------------------------
-
-        # Mecanismo para passar Ids selecionados da tabela de 'Preços Aprovados' para a tabela de 'Precos para Análise'.
         if dados_aprove_agg["selected_rows"] is not None and not dados_aprove_agg["selected_rows"].empty:
 
             id_r.extend(dados_aprove_agg["selected_rows"]["Id_produto"].tolist())
